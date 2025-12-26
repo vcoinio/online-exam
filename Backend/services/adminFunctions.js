@@ -50,12 +50,12 @@ let trainerRegister = (req, res, next) => {
                 UserModel.findOne({ where: { 'emailid': emailid, status: true } }).then((user) => {
                     if (!user) {
                         tool.hashPassword(password).then((hash) => {
-                            var tempdata = new UserModel({
+                            var tempdata = UserModel.build({ // Use build or create, new UserModel works too but build is explicit
                                 name: name,
                                 password: hash,
                                 emailid: emailid,
                                 contact: contact,
-                                createdBy: req.user._id
+                                createdBy: req.user.id // Fixed from _id
                             })
                             tempdata.save().then(() => {
                                 res.json({
@@ -144,10 +144,15 @@ let getAllTrainers = (req, res, next) => {
             where: { type: 'TRAINER', status: true },
             attributes: { exclude: ['password', 'type', 'createdBy', 'status'] }
         }).then((info) => {
+            const data = info.map(u => {
+                const user = u.toJSON();
+                user._id = u.id;
+                return user;
+            });
             res.json({
                 success: true,
                 message: `Success`,
-                data: info
+                data: data
             })
         }).catch((err) => {
             res.status(500).json({
@@ -182,10 +187,15 @@ let getSingleTrainer = (req, res, next) => {
                 })
             }
             else {
+                const data = info.map(u => {
+                    const user = u.toJSON();
+                    user._id = u.id;
+                    return user;
+                });
                 res.json({
                     success: true,
                     message: `Success`,
-                    data: info
+                    data: data
                 })
 
             }

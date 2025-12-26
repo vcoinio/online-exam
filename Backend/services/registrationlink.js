@@ -1,126 +1,107 @@
-let TestPaperModel = require("../models/testpaper");
+const { TestPaper, Feedback, Trainee } = require("../models");
+let TestPaperModel = TestPaper;
 const appRoot = require("app-root-path");
-let FeedbackModel=require("../models/feedback");
+let FeedbackModel = Feedback;
 
-let stopRegistration = (req,res,next)=>{
-    if(req.user.type==='TRAINER'){
-        
-        var id  =  req.body.id;
+let stopRegistration = async (req, res, next) => {
+    if (req.user.type === 'TRAINER') {
+
+        var id = req.body.id;
         var s = req.body.status;
-        TestPaperModel.findById(id,{testbegins:1,testconducted:1}).then((d)=>{
-            if(d){
-                if(d.testbegins!=true && d.testconducted!=true){
-                    TestPaperModel.findOneAndUpdate({_id : id},{isRegistrationavailable : s})      
-                    .exec(function (err){
-                        if (err){
-                            console.log(err)
-                            res.status(500).json({
-                                success : false,
-                                message : "Unable to change registration status"
-                            })
-                        }
-                        else{
-                            res.json({
-                                success : true,
-                                message : `Registration status changed!`,
-                                currentStatus : s
-                            })       
-                        }
+
+        try {
+            const paper = await TestPaperModel.findByPk(id, {
+                attributes: ['id', 'testbegins', 'testconducted']
+            });
+
+            if (paper) {
+                if (!paper.testbegins && !paper.testconducted) {
+                    await TestPaperModel.update(
+                        { isRegistrationavailable: s },
+                        { where: { id: id } }
+                    );
+
+                    res.json({
+                        success: true,
+                        message: `Registration status changed!`,
+                        currentStatus: s
                     })
                 }
-                else{
+                else {
                     res.json({
-                        success : false,
-                        message : "Unable to change registration status"
+                        success: false,
+                        message: "Unable to change registration status (Test started or conducted)"
                     })
                 }
             }
-            else{
+            else {
                 res.status(500).json({
-                    success : false,
-                    message : "Unable to change registration status"
+                    success: false,
+                    message: "Unable to change registration status (Test not found)"
                 })
             }
-
-        }).catch((e)=>{
+        } catch (e) {
             console.log(e);
             res.status(500).json({
-                success : false,
-                message : "Unable to change registration status"
+                success: false,
+                message: "Unable to change registration status"
             })
-        })
-    }
- 
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    }
-}
-/*
-let Download = (req,res,next)=>{
-    var testid = req.body.id;
-    if(req.user.type === 'TRAINER'){
-        const file = `${appRoot}/public/result/result-${testid}.xlsx`;
-        res.download(file);
-    }else{
-       res.status(401).json({
-           success : false,
-           message : "Permissions not granted!"
-       })
+        }
     }
 
+    else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
 }
-*/
-let Download = (req,res,next)=>{
+
+let Download = (req, res, next) => {
     var testid = req.body.id;
-    if(req.user.type === 'TRAINER'){
+    if (req.user.type === 'TRAINER') {
         const file = `${req.protocol + '://' + req.get('host')}/result/result-${testid}.xlsx`;
         res.json({
-            success : true,
-            message : 'File sent successfully',
-            file :file
+            success: true,
+            message: 'File sent successfully',
+            file: file
         })
-    }else{
-       res.status(401).json({
-           success : false,
-           message : "Permissions not granted!"
-       })
+    } else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
     }
 
 }
 
-
-
-
-let getFeedBack =(req,res,next)=>{
+let getFeedBack = async (req, res, next) => {
     var testid = req.body.testid;
-    if(req.user.type === 'TRAINER'){
-        FeedbackModel.find({testid:testid})
-        .populate('userid')
-        .exec((err,data)=>{
-            if(err){
-                console.log(err);
-                res.status(500).json({
-                    success:false,
-                    message:"Server Error"
-                })
-            }
-            else{
-                res.json({
-                    success:true,
-                    message:"Feedbacks Sent Successfully",
-                    data:data
-                })
-            } 
+    if (req.user.type === 'TRAINER') {
+        try {
+            const data = await FeedbackModel.findAll({
+                where: { testid: testid },
+                include: [{ model: Trainee }] // BelongsTo Trainee (foreignKey: 'userid')
+            });
+
+            res.json({
+                success: true,
+                message: "Feedbacks Sent Successfully",
+                data: data
+            });
+        } catch (err) {
+            console.log(err);
+            res.status(500).json({
+                success: false,
+                message: "Server Error"
+            })
+        }
+    } else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
         })
-    }else{
-       res.status(401).json({
-           success : false,
-           message : "Permissions not granted!"
-       })
     }
 }
 
-module.exports = {stopRegistration,Download,getFeedBack}
+module.exports = { stopRegistration, Download, getFeedBack }

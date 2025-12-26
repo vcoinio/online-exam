@@ -72,7 +72,7 @@ let createEditsubject = async (req, res, next) => {
 
 let getAllSubjects = async (req, res, next) => {
     try {
-        const subject = await SubjectModel.findAll({
+        const subjects = await SubjectModel.findAll({
             where: { status: true },
             attributes: { exclude: ['createdAt', 'updatedAt'] },
             include: [{
@@ -81,10 +81,16 @@ let getAllSubjects = async (req, res, next) => {
             }]
         });
 
+        const data = subjects.map(s => {
+            const subj = s.toJSON();
+            subj._id = s.id;
+            return subj;
+        });
+
         res.json({
             success: true,
             message: `Success`,
-            data: subject
+            data: data
         });
     } catch (err) {
         console.log(err);
@@ -108,10 +114,16 @@ let getSingleSubject = async (req, res, next) => {
             }]
         });
 
+        let data = null;
+        if (subject) {
+            data = subject.toJSON();
+            data._id = subject.id;
+        }
+
         res.json({
             success: true,
             message: `Success`,
-            data: subject
+            data: data
         });
     } catch (err) {
         console.log(err);

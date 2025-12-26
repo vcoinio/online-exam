@@ -1,582 +1,630 @@
-let QuestionModel = require("../models/questions");
-let TestPaperModel = require("../models/testpaper");
-let TraineeEnterModel = require("../models/trainee");
-let tool = require("./tool");
-let options = require("../models/option");
-let SubjectModel = require("../models/subject");
-let result  =require("../services/excel").result;
-let ResultModel = require("../models/results");
+const { TestPaper, Question, Option, Subject, User, Result, Trainee, sequelize } = require("../models");
+let TestPaperModel = TestPaper;
+let QuestionModel = Question;
+let ResultModel = Result;
+let TraineeEnterModel = Trainee;
+let SubjectModel = Subject;
+let options = Option;
+let result = require("../services/excel").result;
 
-
-let createEditTest = (req,res,next)=>{
+let createEditTest = async (req, res, next) => {
     var _id = req.body._id || null;
-    if(req.user.type==='TRAINER'){
-    req.check('type', `invalid type`).notEmpty();
-    req.check('title', 'enter title').notEmpty();
-    req.check('questions', 'enter questions').notEmpty();
+    if (req.user.type === 'TRAINER') {
+        req.check('type', `invalid type`).notEmpty();
+        req.check('title', 'enter title').notEmpty();
+        req.check('questions', 'enter questions').notEmpty();
 
-    var errors = req.validationErrors()
-    if(errors){
-        res.json({
-            success : false,
-            message : 'Invalid inputs',
-            errors : errors
-        })
+        var errors = req.validationErrors()
+        if (errors) {
+            res.json({
+                success: false,
+                message: 'Invalid inputs',
+                errors: errors
+            })
+        }
+        else {
+            var title = req.body.title;
+            var questions = req.body.questions; // Array of IDs
+            var subjects = req.body.subjects; // Array of IDs
+
+            if (_id != null) {
+                try {
+                    const testPaper = await TestPaperModel.findByPk(_id);
+                    if (testPaper) {
+                        await testPaper.update({ title: title });
+                        if (questions) await testPaper.setQuestions(questions);
+                        if (subjects) await testPaper.setSubjects(subjects);
+
+                        res.json({
+                            success: true,
+                            message: "Testpaper has been updated!"
+                        })
+                    } else {
+                        res.status(404).json({
+                            success: false,
+                            message: "Testpaper not found"
+                        })
+                    }
+                } catch (err) {
+                    res.status(500).json({
+                        success: false,
+                        message: "Unable to update testpaper!"
+                    })
+                }
+            }
+            else {
+                var type = req.body.type;
+                var difficulty = req.body.difficulty || 1;
+                var organisation = req.body.organisation;
+                var duration = req.body.duration;
+
+                const t = await sequelize.transaction();
+
+                try {
+                    const existingTest = await TestPaperModel.findOne({
+                        where: { title: title, type: type, testbegins: false }
+                    });
+
+                    if (!existingTest) {
+                        const newTestPaper = await TestPaperModel.create({
+                            type: type,
+                            title: title,
+                            difficulty: difficulty,
+                            organisation: organisation,
+                            duration: duration,
+                            createdBy: req.user.id
+                        }, { transaction: t });
+
+                        if (questions && questions.length > 0) {
+                            await newTestPaper.setQuestions(questions, { transaction: t });
+                        }
+                        if (subjects && subjects.length > 0) {
+                            await newTestPaper.setSubjects(subjects, { transaction: t });
+                        }
+
+                        await t.commit();
+
+                        res.json({
+                            success: true,
+                            message: `New testpaper created successfully!`,
+                            testid: newTestPaper.id
+                        })
+                    } else {
+                        await t.rollback();
+                        res.json({
+                            success: false,
+                            message: `This testpaper already exists!`
+                        })
+                    }
+                } catch (err) {
+                    await t.rollback();
+                    console.log(err);
+                    res.status(500).json({
+                        success: false,
+                        message: "Unable to create new testpaper!"
+                    })
+                }
+            }
+        }
     }
     else {
-        var title =  req.body.title;
-        var questions = req.body.questions;
-        if(_id!=null){
-            TestPaperModel.findOneAndUpdate({
-                _id : _id,
-            },
-            {
-                title : title,
-                questions : questions
-            }).then(()=>{
-                res.json({
-                    success: true,
-                    message :  "Testpaper has been updated!"
-                })
-            }).catch((err)=>{
-                res.status(500).json({
-                    success : false,
-                    message : "Unable to update testpaper!"
-            })
-        })
-      }
-    else{
-        var type =  req.body.type;
-        var title =  req.body.title;
-        var questionsid =  req.body.questions;
-        var difficulty =  req.body.difficulty || null;
-        var organisation = req.body.organisation;
-        var duration = req.body.duration;
-        var subjects = req.body.subjects;
-        
-            TestPaperModel.findOne({ title : title,type : type,testbegins : 0 },{status:0})
-            .then((info)=>{
-                if(!info){
-                    var tempdata = TestPaperModel({
-                        type: type,
-                        title : title,
-                        questions : questionsid,
-                        difficulty : difficulty,
-                        organisation : organisation,
-                        duration :duration,
-                        createdBy : req.user._id,
-                        subjects : subjects,
-                    
-                    })
-                    tempdata.save().then((d)=>{
-                        res.json({
-                            success : true,
-                            message : `New testpaper created successfully!`,
-                            testid : d._id
-                        })
-                    }).catch((err)=>{
-                        console.log(err);
-                        res.status(500).json({
-                            success : false,
-                            message : "Unable to create new testpaper!"
-                        })
-                    })
-                }
-                else{
-                    res.json({
-                        success : false,
-                        message : `This testpaper already exists!`
-                    })
-                }   
-
-            })
-        
-        }
-     }
-  }
-    else{
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
-
     }
 }
 
-let getSingletest = (req,res,next)=>{
+let getSingletest = async (req, res, next) => {
     let id = req.params._id;
     console.log(id);
-    TestPaperModel.find({_id: id,status : 1},{createdAt: 0, updatedAt : 0,status : 0})
-    .populate('createdBy', 'name')
-    .populate('questions' , 'body')
-    .populate({
-        path: 'subjects',
-        model : SubjectModel
-    })
-    .populate({ path: 'questions', 
-        populate: {  
-            path: 'options',
-            model: options,
-        }
-    })
-    .exec(function (err, testpaper) {
-        if (err){
-            console.log(err)
-            res.status(500).json({
-                success : false,
-                message : "Unable to fetch data"
-            })
-        }
-        else{
-            res.json({
-                success : true,
-                message : `Success`,
-                data : testpaper
-            })   
-        }
-    })        
+    try {
+        const testpaper = await TestPaperModel.findOne({
+            where: { id: id, status: true },
+            attributes: { exclude: ['createdAt', 'updatedAt', 'status'] },
+            include: [
+                { model: User, attributes: ['name'] },
+                {
+                    model: SubjectModel,
+                    as: 'subjects',
+                    attributes: ['topic'],
+                    through: { attributes: [] }
+                },
+                {
+                    model: QuestionModel,
+                    as: 'questions',
+                    attributes: ['body'],
+                    through: { attributes: [] },
+                    include: [{ model: options, as: 'options' }]
+                }
+            ]
+        });
+
+
+
+        const data = testpaper ? [testpaper.toJSON()] : [];
+        if (data.length > 0) data[0]._id = testpaper.id;
+
+        res.json({
+            success: true,
+            message: `Success`,
+            data: data
+        })
+    } catch (err) {
+        console.log(err)
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch data"
+        })
+    }
 }
 
-let getAlltests = (req,res,next)=>{
-    if(req.user.type==='TRAINER'){
-        var title = req.body.title;
-            TestPaperModel.find({createdBy : req.user._id,status : 1},{status : 0})
-            .populate('questions' , 'body')
-            .populate({
-                path: 'subjects',
-                model : SubjectModel
-            })
-            .populate({ path: 'questions', 
-            populate: {  
-                path: 'options',
-                model: options
-            }
+let getAlltests = async (req, res, next) => {
+    if (req.user.type === 'TRAINER') {
+        try {
+            const testpapers = await TestPaperModel.findAll({
+                where: { createdBy: req.user.id, status: true },
+                attributes: { exclude: ['status'] },
+                include: [
+                    {
+                        model: SubjectModel,
+                        as: 'subjects',
+                        through: { attributes: [] }
+                    },
+                    {
+                        model: QuestionModel,
+                        as: 'questions',
+                        attributes: ['body'],
+                        through: { attributes: [] },
+                        include: [{ model: options, as: 'options' }]
+                    }
+                ]
+            });
 
-        })
-        
-            .exec(function (err, testpaper) {
-                if (err){
-                    console.log(err)
-                    res.status(500).json({
-                        success : false,
-                        message : "Unable to fetch data"
-                    })
-                }
-                else{
-                    res.json({
-                        success : true,
-                        message : `Success`,
-                        data : testpaper
-                    })
-                }
-            })        
-        
-        }
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    } 
-}   
+            const data = testpapers.map(t => {
+                const test = t.toJSON();
+                test._id = t.id;
+                return test;
+            });
 
-let deleteTest = (req,res,next)=>{
-    if(req.user.type==='TRAINER'){
-        var _id =  req.body._id;
-        TestPaperModel.findOneAndUpdate({
-            _id : _id
-        },
-        {
-            status : 0
-
-        }).then(()=>{
             res.json({
                 success: true,
-                message :  "Test has been deleted"
+                message: `Success`,
+                data: data
             })
-        }).catch((err)=>{
-            res.status(500).json({
-                success : false,
-                message : "Unable to delete test"
-            })
-        })
-    }
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    } 
-}
-let TestDetails = (req,res,next)=>{
-    if(req.user.type === 'TRAINER'){
-        let testid = req.body.id;
-        TestPaperModel.findOne({_id:testid,createdBy : req.user._id},{isResultgenerated:0,isRegistrationavailable:0,createdBy:0,status:0,testbegins:0,questions : 0})
-        .populate('subjects', 'topic')
-        .exec(function(err,TestDetails){
-                if(err){
-                    console.log(err)
-                    res.status(500).json({
-                        success : false,
-                        message : "Unable to fetch details"
-                    })
-                }else{
-                    if(!TestDetails){
-                        res.json({
-                            success : false,
-                            message : 'Invalid test id.'
-                        })
-                    }else{
-                        res.json({
-                            success : true,
-                            message : 'Success',
-                            data : TestDetails
-                        })
-
-                    }
-                }
-        })
-    }else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    }
-}
-
-let basicTestdetails = (req,res,next)=>{
-    if(req.user.type==='TRAINER'){
-        let testid = req.body.id;
-        TestPaperModel.findById(testid,{questions:0})
-        .populate('createdBy', 'name')
-        .populate('subjects', 'topic')
-        .exec(function (err, basicTestdetails){
-            if(err){
-                console.log(err)
-                res.status(500).json({
-                    success : false,
-                    message : "Unable to fetch details"
-                })
-            }
-            else{
-                if(!basicTestdetails){
-                    res.json({
-                        success : false,
-                        message : 'Invalid test id.'
-                    })
-
-                }
-                else{
-                    res.json({
-                        success : true,
-                        message : 'Success',
-                        data : basicTestdetails
-                    })
-
-                }
-            }
-
-        })
-    }
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    }
-    
-
-}
-
- let getTestquestions = (req,res,next)=>{
-     if(req.user.type==="TRAINER"){
-         var testid = req.body.id;
-         TestPaperModel.findById(testid,{type:0,title:0,subjects:0,duration:0,organisation:0,difficulty:0,testbegins:0,status:0,createdBy:0,isRegistrationavailable:0})
-        .populate('questions','body')
-        .populate({ 
-          path: 'questions',
-          model: QuestionModel,
-          select : {'body': 1,'quesimg' : 1,'weightage':1,'anscount': 1},
-            populate: {  
-                path: 'options',
-                model: options
-            }
-
-    })
-        .exec(function (err, getTestquestions){
-            if(err){
-                console.log(err)
-                res.status(500).json({
-                    success : false,
-                    message : "Unable to fetch details"
-                })
-            }
-            else{
-                if(!getTestquestions){
-                    res.json({
-                        success : false,
-                        message : 'Invalid test id.'
-                    })
-
-                }
-                else{
-                    res.json({
-                        success : true,
-                        message : 'Success',
-                        data : getTestquestions.questions
-                    })
-
-                }
-            }
-
-        })
-    }
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    }
-     
- }
-
- let getCandidateDetails = (req,res,next)=>{
-    if(req.user.type==="TRAINER"){
-        var testid = req.body.testid;
-       ResultModel.find({testid : testid},{score : 1, userid : 1})
-       .populate('userid')
-       .exec(function(err,getCandidateDetails){
-        if(err){
+        } catch (err) {
             console.log(err)
             res.status(500).json({
-                success : false,
-                message : "Unable to fetch details"
+                success: false,
+                message: "Unable to fetch data"
             })
-        }else{
-            if(getCandidateDetails.length==null){
-                res.json({
-                    success : false,
-                    message: 'Invalid testid!'
-                })
-            }else{
-                res.json({
-                    success : true,
-                    message:'Candidate details',
-                    data : getCandidateDetails
-                })
-            }
-          }
-       })
+        }
     }
-    else{
+    else {
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
     }
- }
+}
 
+let deleteTest = async (req, res, next) => {
+    if (req.user.type === 'TRAINER') {
+        var _id = req.body._id;
+        try {
+            await TestPaperModel.update({ status: false }, {
+                where: { id: _id }
+            });
+            res.json({
+                success: true,
+                message: "Test has been deleted"
+            })
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                message: "Unable to delete test"
+            })
+        }
+    }
+    else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
 
- let getCandidates = (req,res,next)=>{
-    if(req.user.type==="TRAINER"){
+let TestDetails = async (req, res, next) => {
+    if (req.user.type === 'TRAINER') {
+        let testid = req.body.id;
+        try {
+            const testDetails = await TestPaperModel.findOne({
+                where: { id: testid, createdBy: req.user.id },
+                attributes: { exclude: ['isResultgenerated', 'isRegistrationavailable', 'createdBy', 'status', 'testbegins', 'questions'] },
+                include: [{
+                    model: SubjectModel,
+                    as: 'subjects',
+                    attributes: ['topic'],
+                    through: { attributes: [] }
+                }]
+            });
+
+            if (!testDetails) {
+                res.json({
+                    success: false,
+                    message: 'Invalid test id.'
+                })
+            } else {
+                const data = testDetails.toJSON();
+                data._id = testDetails.id;
+                res.json({
+                    success: true,
+                    message: 'Success',
+                    data: data
+                })
+            }
+        } catch (err) {
+            console.log(err)
+            res.status(500).json({
+                success: false,
+                message: "Unable to fetch details"
+            })
+        }
+    } else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
+
+let basicTestdetails = async (req, res, next) => {
+    if (req.user.type === 'TRAINER') {
+        let testid = req.body.id;
+        try {
+            const details = await TestPaperModel.findByPk(testid, {
+                attributes: { exclude: ['questions'] },
+                include: [
+                    { model: User, attributes: ['name'] },
+                    { model: SubjectModel, as: 'subjects', attributes: ['topic'], through: { attributes: [] } }
+                ]
+            });
+
+            if (!details) {
+                res.json({
+                    success: false,
+                    message: 'Invalid test id.'
+                })
+            }
+            else {
+                const data = details.toJSON();
+                data._id = details.id;
+                res.json({
+                    success: true,
+                    message: 'Success',
+                    data: data
+                })
+            }
+        } catch (err) {
+            console.log(err)
+            res.status(500).json({
+                success: false,
+                message: "Unable to fetch details"
+            })
+        }
+    }
+    else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
+
+let getTestquestions = async (req, res, next) => {
+    if (req.user.type === "TRAINER") {
         var testid = req.body.id;
-        TraineeEnterModel.find({testid:testid},{testid:0})
-        .then((getCandidates)=>{
+        try {
+            const testPaper = await TestPaperModel.findByPk(testid, {
+                include: [{
+                    model: QuestionModel,
+                    as: 'questions',
+                    attributes: ['body', 'quesimg', 'weightage', 'anscount'],
+                    through: { attributes: [] },
+                    include: [{ model: options, as: 'options' }]
+                }]
+            });
+
+            if (!testPaper) {
+                res.json({
+                    success: false,
+                    message: 'Invalid test id.'
+                })
+            }
+            else {
+                const result = testPaper.questions.map(q => {
+                    const qjson = q.toJSON();
+                    qjson._id = q.id;
+                    return qjson;
+                });
+                res.json({
+                    success: true,
+                    message: 'Success',
+                    data: result
+                })
+            }
+        } catch (err) {
+            console.log(err)
+            res.status(500).json({
+                success: false,
+                message: "Unable to fetch details"
+            })
+        }
+    }
+    else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
+
+let getCandidateDetails = async (req, res, next) => {
+    if (req.user.type === "TRAINER") {
+        var testid = req.body.testid;
+        try {
+            const details = await ResultModel.findAll({
+                where: { testid: testid },
+                attributes: ['score', 'userid'],
+                include: [{ model: TraineeEnterModel }]
+            });
+
+            if (!details || details.length === 0) {
+                res.json({
+                    success: false,
+                    message: 'Invalid testid or no candidates!'
+                })
+            } else {
+                const data = details.map(d => {
+                    const json = d.toJSON();
+                    // Trainee info might be nested, let's leave it as is unless we know what frontend expects
+                    return json;
+                });
+                res.json({
+                    success: true,
+                    message: 'Candidate details',
+                    data: data
+                })
+            }
+        } catch (err) {
+            console.log(err)
+            res.status(500).json({
+                success: false,
+                message: "Unable to fetch details"
+            })
+        }
+    }
+    else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
+
+
+let getCandidates = async (req, res, next) => {
+    if (req.user.type === "TRAINER") {
+        var testid = req.body.id;
+        try {
+            const candidates = await TraineeEnterModel.findAll({
+                where: { testid: testid },
+                attributes: { exclude: ['testid'] }
+            });
+            const data = candidates.map(c => {
+                const json = c.toJSON();
+                json._id = c.id;
+                return json;
+            });
             res.json({
                 success: true,
-                message :  "success",
-                data : getCandidates
+                message: "success",
+                data: data
             })
-        }).catch((err)=>{
+        } catch (err) {
             res.status(500).json({
-                success : false,
-                message : "Unable to get candidates!"
+                success: false,
+                message: "Unable to get candidates!"
             })
-        })
+        }
     }
-    else{
+    else {
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
     }
- }
+}
 
- let beginTest = (req,res,next)=>{
-    if(req.user.type==="TRAINER"){
+let beginTest = async (req, res, next) => {
+    if (req.user.type === "TRAINER") {
         var id = req.body.id;
-        TestPaperModel.findOneAndUpdate({_id:id,testconducted : false},{testbegins:1,isRegistrationavailable:0},{new: true})
-        .then((data)=>{
-            if(data){
+        try {
+            const [updated] = await TestPaperModel.update(
+                { testbegins: true, isRegistrationavailable: false },
+                { where: { id: id, testconducted: false } }
+            );
+
+            if (updated) {
+                const data = await TestPaperModel.findByPk(id);
                 res.json({
-                    success : true,
-                    message : 'Test has been started.',
-                    data : {
+                    success: true,
+                    message: 'Test has been started.',
+                    data: {
                         isRegistrationavailable: data.isRegistrationavailable,
-                        testbegins : data.testbegins,
-                        testconducted : data.testconducted,
-                        isResultgenerated : data.isResultgenerated
+                        testbegins: data.testbegins,
+                        testconducted: data.testconducted,
+                        isResultgenerated: data.isResultgenerated
                     }
                 })
             }
-            else{
+            else {
                 res.json({
-                    success : false,
-                    message : "Unable to start test."
+                    success: false,
+                    message: "Unable to start test or test already conducted."
                 })
             }
-        }).catch((err)=>{
+        } catch (err) {
             res.status(500).json({
-                success : false,
-                message : "Server Error"
+                success: false,
+                message: "Server Error"
             })
-        })
+        }
     }
-    else{
+    else {
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
     }
- }
+}
 
- let endTest = (req,res,next)=>{
-    if(req.user.type==="TRAINER"){
+let endTest = async (req, res, next) => {
+    if (req.user.type === "TRAINER") {
         var id = req.body.id;
-        TestPaperModel.findOneAndUpdate({_id:id,testconducted:0,testbegins:1,isResultgenerated:0},{testbegins:false,testconducted:true, isResultgenerated:true},{
-            new: true
-          })
-        .then((info)=>{
-            if(info){
-                console.log(info);
-                result(id,MaxMarks).then((sheet)=>{
+        try {
+            const [updated] = await TestPaperModel.update(
+                { testbegins: false, testconducted: true, isResultgenerated: true },
+                { where: { id: id, testconducted: false, testbegins: true } }
+            );
+
+            if (updated) {
+                const info = await TestPaperModel.findByPk(id);
+                try {
+                    const maxMarks = await MaxMarks(id);
+                    await result(id, maxMarks); // Assuming result() supports async/await or returns promise
+
                     res.json({
-                        success : true,
-                        message : 'The test has ended.',
-                        data : {
-                            isRegistrationavailable : info.isRegistrationavailable,
-                            testbegins : info.testbegins,
-                            testconducted : info.testconducted,
-                            isResultgenerated : info.isResultgenerated
+                        success: true,
+                        message: 'The test has ended.',
+                        data: {
+                            isRegistrationavailable: info.isRegistrationavailable,
+                            testbegins: info.testbegins,
+                            testconducted: info.testconducted,
+                            isResultgenerated: info.isResultgenerated
                         }
                     })
-                }).catch((error)=>{
+                } catch (error) {
                     console.log(error)
                     res.status(500).json({
-                        success : false,
-                        message : "Server Error"
+                        success: false,
+                        message: "Server Error during result generation"
                     })
-                })
-            }
-            else{
-                res.json({
-                    success : false,
-                    message : "Invalid inputs!"
-                })
-            }  
-           
-        }).catch((err)=>{
-            console.log(err)
-            res.status(500).json({
-                success : false,
-                message : "Server Error"
-            })
-        })
-    }
-    else{
-        res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
-        })
-    }
- }
-
- let MaxMarks = (testid)=>{
-    return new Promise((resolve,reject)=>{
-        TestPaperModel.findOne({_id:testid},{questions:1})
-        .populate({
-            path : 'questions',
-            model : QuestionModel,
-            select : {'weightage' : 1}
-        })
-        .exec(function(err,Ma){
-            if(err){
-                console.log(err)
-                reject(err)
-            }else{
-                if(!Ma){
-                    reject(new Error('Invalid testid'))
-                }else{
-                    let m = 0;
-                    Ma.questions.map((d,i)=>{
-                        m+=d.weightage;
-                    })
-                    console.log(m)
-                    resolve(m)
                 }
             }
-        })
-
-    })
-}
-
-let MM = (req,res,next)=>{
-    var testid = req.body.testid;
-    if(req.user.type === 'TRAINER'){
-        MaxMarks(testid).then((MaxM)=>{
-            res.json({
-                success : true,
-                message : 'Maximum Marks',
-                data : MaxM
-            })
-        }).catch((error)=>{
+            else {
+                res.json({
+                    success: false,
+                    message: "Invalid inputs! or test not running"
+                })
+            }
+        } catch (err) {
+            console.log(err)
             res.status(500).json({
-                success:false,
-                message:"Unable to get Max Marks",
+                success: false,
+                message: "Server Error"
             })
-        })
-    }else{
+        }
+    }
+    else {
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
     }
 }
- 
-let checkTestName =(req,res,next)=>{
+
+let MaxMarks = async (testid) => {
+    try {
+        const testPaper = await TestPaperModel.findByPk(testid, {
+            include: [{
+                model: QuestionModel,
+                as: 'questions',
+                attributes: ['weightage'],
+                through: { attributes: [] }
+            }]
+        });
+
+        if (!testPaper) {
+            throw new Error('Invalid testid');
+        }
+
+        let m = 0;
+        testPaper.questions.map((d) => {
+            m += d.weightage;
+        })
+        console.log(m)
+        return m;
+    } catch (err) {
+        throw err;
+    }
+}
+
+let MM = async (req, res, next) => {
+    var testid = req.body.testid;
+    if (req.user.type === 'TRAINER') {
+        try {
+            const MaxM = await MaxMarks(testid);
+            res.json({
+                success: true,
+                message: 'Maximum Marks',
+                data: MaxM
+            })
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: "Unable to get Max Marks",
+            })
+        }
+    } else {
+        res.status(401).json({
+            success: false,
+            message: "Permissions not granted!"
+        })
+    }
+}
+
+let checkTestName = async (req, res, next) => {
     var testName = req.body.testname;
-    if(req.user.type === 'TRAINER'){
-        TestPaperModel.findOne({title:testName},{_id:1}).then((data)=>{
-            if(data){
+    if (req.user.type === 'TRAINER') {
+        try {
+            const data = await TestPaperModel.findOne({ where: { title: testName } });
+            if (data) {
                 res.json({
-                    success:true,
-                    can_use:false
+                    success: true,
+                    can_use: false
                 })
             }
-            else{
+            else {
                 res.json({
-                    success:true,
-                    can_use:true
+                    success: true,
+                    can_use: true
                 })
             }
-        }).catch((error)=>{
+        } catch (error) {
             console.log(error);
             res.status(500).json({
-                success:false,
-                message:"Server error"
+                success: false,
+                message: "Server error"
             })
-        })
+        }
     }
-    else{
+    else {
         res.status(401).json({
-            success : false,
-            message : "Permissions not granted!"
+            success: false,
+            message: "Permissions not granted!"
         })
     }
 }
- 
 
- 
- 
-
-module.exports = {checkTestName,createEditTest,getSingletest,getAlltests,deleteTest,MaxMarks,MM,getCandidateDetails,basicTestdetails,TestDetails,getTestquestions,getCandidates,beginTest,endTest}
+module.exports = { checkTestName, createEditTest, getSingletest, getAlltests, deleteTest, MaxMarks, MM, getCandidateDetails, basicTestdetails, TestDetails, getTestquestions, getCandidates, beginTest, endTest }
