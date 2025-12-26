@@ -12,8 +12,7 @@ const Answer = sequelize.define('AnswersModel', {
         allowNull: false
     },
     chosenOption: {
-        type: DataTypes.JSONB,
-        defaultValue: []
+        type: DataTypes.JSON
     }
 }, {
     timestamps: true,

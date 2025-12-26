@@ -12,11 +12,11 @@ const SubResult = sequelize.define('subResultsModel', {
         allowNull: false
     },
     correctAnswer: {
-        type: DataTypes.JSONB, // Array of values
+        type: DataTypes.JSON, // Array of values
         allowNull: false
     },
     givenAnswer: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         allowNull: false
     },
     weightage: {

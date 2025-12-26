@@ -1,16 +1,22 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:13
+  mysql:
+    image: mysql:8.0
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: exam_system
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: exam_system
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
     ports:
-      - "5432:5432"
+      - "3307:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: ./Backend
@@ -18,13 +24,14 @@ services:
       - "5001:5000"
     environment:
       - PORT=5000
-      - DB_HOST=postgres
+      - DB_HOST=mysql
       - DB_USER=user
       - DB_PASS=password
       - DB_NAME=exam_system
-      - DB_DIALECT=postgres
+      - DB_DIALECT=mysql
     depends_on:
-      - postgres
+      mysql:
+        condition: service_healthy
 
   frontend:
     build: ./Frontend
@@ -34,4 +41,4 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  mysql_data:
