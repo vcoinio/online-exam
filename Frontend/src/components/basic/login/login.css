@@ -1,0 +1,63 @@
+.login-container {
+    width: 400px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 10;
+    margin-right: 10%;
+    /* Keep it somewhat to the right as per original design intention */
+    float: right;
+    animation: fadeIn 1s ease-out;
+}
+
+/* Center it properly on mobile */
+@media (max-width: 768px) {
+    .login-container {
+        float: none;
+        margin: 0 auto;
+        width: 90%;
+    }
+}
+
+.login-inner {
+    padding: 40px;
+}
+
+.login-inner .ant-form-item {
+    margin-bottom: 24px;
+}
+
+.login-inner .ant-input {
+    height: 45px;
+    border-radius: 5px;
+    background: #f7f9fc;
+    border: 1px solid #e1e4e8;
+}
+
+.login-inner .ant-input:focus {
+    background: #fff;
+    border-color: #5c258d;
+    /* Primary color */
+    box-shadow: 0 0 0 2px rgba(92, 37, 141, 0.2);
+}
+
+.login-inner .ant-btn-primary {
+    height: 45px;
+    font-weight: 600;
+    font-size: 16px;
+    border-radius: 25px;
+    width: 100%;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
