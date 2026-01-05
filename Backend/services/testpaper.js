@@ -381,8 +381,9 @@ let getCandidateDetails = async (req, res, next) => {
 
             if (!details || details.length === 0) {
                 res.json({
-                    success: false,
-                    message: 'Invalid testid or no candidates!'
+                    success: true,
+                    message: 'No candidates found',
+                    data: []
                 })
             } else {
                 const data = details.map(d => {

@@ -92,7 +92,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-sequelize.sync().then(() => {
+sequelize.sync({ alter: true }).then(() => {
     tool.createadmin();
     app.listen(PORT, (err) => {
         if (err) {
